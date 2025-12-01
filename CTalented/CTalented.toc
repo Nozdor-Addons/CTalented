@@ -1,0 +1,11 @@
+## Interface: 30300
+## Title: CTalented
+## Notes: Аддон для быстрой смены талантов
+## Author: Альтруист
+## Version: 1.0
+
+## SavedVariables: CustomTalentedDB, CustomTalentsDB
+
+CTalents_DB.lua
+CTalents_Core.lua
+CTalented.lua
