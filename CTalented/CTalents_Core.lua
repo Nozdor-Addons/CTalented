@@ -86,7 +86,10 @@ local function CT_GetTalentDataForPlayer()
         specIndex = CT_GetSpecIndex0()
     end
 
-    local classDB = CustomTalentsData[classKey] or CustomTalentsData["DEFAULT"]
+    local classDB = CustomTalentsData[classKey]
+    if not classDB and classKey ~= CT_GetClassKey() then
+        classDB = CustomTalentsData["DEFAULT"]
+    end
     if not classDB then return nil end
 
     return classDB[specIndex] or classDB[0]
@@ -321,6 +324,65 @@ local function CT_AutoFillTalentsForClass(classKey)
                 end
             end
         end
+    end
+end
+
+-- Классы без статических таблиц (Охотник на демонов): деревья из клиента,
+-- id таланта — номер из Talent.dbc (ссылка talent:ID), он же уходит серверу.
+local function CT_FillTalentsFromClient()
+    local classKey = CT_GetClassKey()
+    if CustomTalentsData[classKey] then return end
+    if not GetNumTalentTabs or not GetTalentInfo or not GetTalentLink then return end
+
+    local numTabs = GetNumTalentTabs()
+    if not numTabs or numTabs <= 0 then return end
+
+    local trees = {}
+    for tabIndex = 1, numTabs do
+        local tabName, tabIcon, _, tabBackground = GetTalentTabInfo(tabIndex)
+        local talents, byPos, prereqs = {}, {}, {}
+
+        for talentIndex = 1, GetNumTalents(tabIndex) or 0 do
+            local name, icon, tier, column, _, maxRank = GetTalentInfo(tabIndex, talentIndex)
+            local link = GetTalentLink(tabIndex, talentIndex)
+            local id = link and tonumber(link:match("talent:(%d+)"))
+            if name and id and tier and column then
+                talents[#talents + 1] = {
+                    id       = id,
+                    name     = name,
+                    row      = tier,
+                    col      = column,
+                    maxRank  = maxRank or 1,
+                    icon     = icon,
+                }
+                local key = tier * 10 + column
+                byPos[key] = byPos[key] or #talents
+                local reqTier, reqColumn = GetTalentPrereqs(tabIndex, talentIndex)
+                if reqTier and reqColumn then
+                    prereqs[#talents] = reqTier * 10 + reqColumn
+                end
+            end
+        end
+
+        for index, key in pairs(prereqs) do
+            if byPos[key] and byPos[key] ~= index then
+                talents[index].reqIndex = byPos[key]
+            end
+        end
+
+        trees[tabIndex] = {
+            name       = tabName,
+            background = tabBackground and ("Interface\\TalentFrame\\" .. tabBackground .. "-TopLeft"),
+            icon       = tabIcon,
+            gridRows   = 11,
+            gridCols   = 4,
+            talents    = talents,
+        }
+    end
+
+    CustomTalentsData[classKey] = {}
+    for specIndex = 0, 8 do
+        CustomTalentsData[classKey][specIndex] = { trees = trees }
     end
 end
 
@@ -1776,6 +1838,7 @@ function CT_BuildTalentGrid()
     CT.treeFrames = {}
 
     CT_ClearAllArrows()
+    CT_FillTalentsFromClient()
 
     -- Получаем данные для текущего отображаемого класса/спека
     local data = CT_GetTalentDataForPlayer()
@@ -1870,7 +1933,14 @@ local function CT_ShowTemplateMenu(anchor)
 
     local menu = {}
 
-    for _, classKey in ipairs(CLASS_ORDER) do
+    local classes = {}
+    for _, classKey in ipairs(CLASS_SORT_ORDER_ALL or CLASS_SORT_ORDER or CLASS_ORDER) do
+        if CustomTalentsData[classKey] then
+            classes[#classes + 1] = classKey
+        end
+    end
+
+    for _, classKey in ipairs(classes) do
         local className = CT_LocalizedClassName(classKey)
 
         local displayName = className
@@ -2218,6 +2288,7 @@ initFrame:SetScript("OnEvent", function(self, event, arg1)
         CT.viewSpecIndex = CT_GetSpecIndex0()
         -- Инициализируем таланты из локальной CustomTalentsSpellData
         CT_InitTalentsFromSpellData()
+        CT_FillTalentsFromClient()
 
         CT_PrintInfo("Загружен. Кнопка 'Шаблоны' на окне талантов.")
         if IsAddOnLoaded("Blizzard_TalentUI") then

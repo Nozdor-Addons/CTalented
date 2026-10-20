@@ -3,6 +3,7 @@
 ## Notes: Аддон для быстрой смены талантов
 ## Author: Альтруист
 ## Version: 1.0
+## X-Nozdor-DemonHunter: 1
 
 ## SavedVariables: CustomTalentedDB, CustomTalentsDB
 
